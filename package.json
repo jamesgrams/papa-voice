@@ -1,0 +1,26 @@
+{
+  "name": "papa-voice",
+  "author": "James Grams <james@game103.net>",
+  "version": "1.0.0",
+  "description": "Papa Voice",
+  "main": "src/index.js",
+  "private": true,
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "sonus": "^1.0.3",
+    "@google-cloud/speech": "^4.4.0",
+    "axios": "^0.21.1",
+    "jsdom": "^16.5.1"
+  },
+  "engines": {
+    "node": ">= 10.10.0",
+    "npm": ">= 3.0.0"
+  },
+  "browserslist": [
+    "> 1%",
+    "last 2 versions",
+    "not ie <= 8"
+  ]
+}
