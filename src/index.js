@@ -217,7 +217,7 @@ function handleGoogleResult( text ) {
             runCommands( [ 
                 {
                     device: "samsung-tv",
-                    command: "inputhdmi1"
+                    command: "inputhdmi2"
                 },
                 {
                     device: "roku-streaming-stick",
@@ -321,7 +321,10 @@ async function runCommands( commands ) {
             try {
                 await axios.post( HARMONY_URL + command.device + "/commands/" + command.command );
             }
-            catch(err) { console.log(err) }
+            catch(err) { 
+                console.log(err);
+                await proc.exec(RESTART_HARMONY);
+            }
         }
         await sleep(100);
     }
