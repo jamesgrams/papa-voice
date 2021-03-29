@@ -31,6 +31,8 @@ const GIT_FETCH_COMMAND = "git -C /home/pi/papa-voice fetch";
 const GIT_UPDATES_AVAILABLE_COMMAND = 'if [ $(git -C /home/pi/papa-voice rev-parse HEAD) != $(git -C /home/pi/papa-voice rev-parse @{u}) ]; then echo "1"; else echo "0"; fi;';
 const GIT_PULL_COMMAND = "git -C /home/pi/papa-voice pull";
 const GIT_PULL_INTERVAL = 1000 * 60 * 5;
+const RESTART_HARMONY = "sudo service harmony-api-server restart";
+const WAIT_TIME = 1000 * 60 * 20;
 
 // List of channels that Papa gets - taken from here: https://www.spectrum.com/cable-tv/channel-lineup
 // Gold package
@@ -61,6 +63,8 @@ let currentlyStreamingToGoogle = false;
  * Main function.
  */
 async function main() {
+    sleep(WAIT_TIME);
+    await proc.execSync(RESTART_HARMONY);
     fetchLineup();
     listen();
     update();
