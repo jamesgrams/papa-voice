@@ -136,12 +136,7 @@ function pipeToGoogle( recording ) {
  **/
 function handleGoogleResult( text ) {
     text = replaceSpecial(text);
-    
-    // how many times in a row the command has been said
-    if( text != prevCommand ) cursor = 0;
-    else cursor++;
-    prevCommand = text;
-    
+
     while( text.match(/^grasshopper/) ) text = text.replace(/^grasshopper/g,"").trim();
     if( text == "turn on" ) text = "on";
     if( text == "turn off" ) text = "off";
@@ -152,6 +147,11 @@ function handleGoogleResult( text ) {
     if( text == "turn volume down" ) text = "volume down";
     if( text == "sports" ) text = "sport";
     if( text == "movies" ) text = "movie";
+
+    // how many times in a row the command has been said
+    if( text != prevCommand ) cursor = 0;
+    else cursor++;
+    prevCommand = text;
     
     switch(text) {
         case "on":
