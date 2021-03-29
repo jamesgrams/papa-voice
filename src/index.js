@@ -448,11 +448,10 @@ async function fetchLineup() {
 main();
 
 // Restart the process if there is an error
-// This should be done in the service file.
-/*process.on('uncaughtException', function (err) {
+process.on('uncaughtException', function (err) {
     console.error(err.stack);
     restart();
-});*/
+});
 
 /**
  * Restart the program
