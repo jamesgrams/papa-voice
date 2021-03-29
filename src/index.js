@@ -25,7 +25,7 @@ const GOOGLE_REQUEST = {
     interimResults: false, // Get interim results from stream
 };
 const CHARLOTTE_URL = "https://www.tvpassport.com/lineups/set/95354D?lineupname=Spectrum+-+Charlotte%2C+NC+&tz=America/New_York";
-const LINEUP_INTERVAL = 1000 * 60 * 5;
+const LINEUP_INTERVAL = 1000 * 60 * 10;
 const HARMONY_URL = "http://localhost:8282/hubs/papa/devices/";
 const GIT_FETCH_COMMAND = "git -C /home/pi/papa-voice fetch";
 const GIT_UPDATES_AVAILABLE_COMMAND = 'if [ $(git -C /home/pi/papa-voice rev-parse HEAD) != $(git -C /home/pi/papa-voice rev-parse @{u}) ]; then echo "1"; else echo "0"; fi;';
@@ -62,17 +62,25 @@ let currentlyStreamingToGoogle = false;
  */
 async function main() {
     fetchLineup();
-    //listen();
-    //setInterval( update, GIT_PULL_INTERVAL );
+    listen();
+    update();
 }
 
 function update() {
-    proc.execSync( GIT_FETCH_COMMAND );
-    let updatesAvailable = parseInt(proc.execSync( GIT_UPDATES_AVAILABLE_COMMAND ).toString());
-    if( updatesAvailable ) {
-        proc.execSync(GIT_PULL_COMMAND);
-        restart();
+    console.log("Checking for updates");
+    try {
+        proc.execSync( GIT_FETCH_COMMAND );
+        let updatesAvailable = parseInt(proc.execSync( GIT_UPDATES_AVAILABLE_COMMAND ).toString());
+        if( updatesAvailable ) {
+            console.log("Updating");
+            proc.execSync(GIT_PULL_COMMAND);
+            restart();
+        }
     }
+    catch(err) {
+        console.log(err);
+    }
+    setTimeout( update, GIT_PULL_INTERVAL );
 }
 
 /**
@@ -127,12 +135,21 @@ function pipeToGoogle( recording ) {
  * You can find commands here: https://github.com/maddox/harmony-api.
  **/
 function handleGoogleResult( text ) {
-    text = text.toLowerCase();
+    text = replaceSpecial(text);
     
     // how many times in a row the command has been said
     if( text != prevCommand ) cursor = 0;
     else cursor++;
     prevCommand = text;
+    
+    while( text.match(/^grasshopper/) ) text = text.replace(/^grasshopper/g,"").trim();
+    if( text == "turn on" ) text = "on";
+    if( text == "turn off" ) text = "off";
+    if( text == "watch amazon" ) text = "amazon";
+    if( text == "watch spectrum" ) text = "spectrum";
+    if( text == "watch roku" ) text = "roku";
+    if( text == "turn volume up" ) text = "volume up";
+    if( text == "turn volume down" ) text = "volume down";
     
     switch(text) {
         case "on":
@@ -233,16 +250,31 @@ function handleGoogleResult( text ) {
                     console.log("Setting channel to " + number);
                     runCommands(commands);
                 }
-                if( parseInt( match[1] ) ) {
-                    enterChannelNumber( match[1] );
+                let value = replaceSpecial(match[1]);
+                if( parseInt( value ) ) {
+                    enterChannelNumber( value );
                 }
                 else {
-                    let results = Object.values( lineup ).filter( el =>
-                        el.name.match( match[1] ) ||
-                        el.program.show( match[1] ) ||
-                        el.program.episode( match[1] ) ||
-                        el.program.type( match[1] )
-                    );
+                    let results = Object.values( lineup ).filter( el => {
+                        let count = 0;
+                        for( let val of value.split(" ") ) {
+                            if( el.name.match( val ) ||
+                            el.program.show.match( val ) ||
+                            el.program.episode.match( val ) ||
+                            el.program.type.match( val ) ) {
+                                count++;
+                            }
+                        }
+                        el.count = count;
+                        return count > 0;
+                    } );
+                    results = results.sort( (a,b) => {
+                        if( a.count > b.count ) return -1;
+                        if( b.count > a.count ) return 1;
+                        if( parseInt(a.number) < parseInt(b.number) ) return -1;
+                        if( parseInt(b.number) < parseInt(b.number) ) return 1;
+                        return 0;
+                    } );
                     if( results.length ) {
                         if( cursor >= results.length ) cursor = 0;
                         console.log("Matched: " + results[cursor].name);
@@ -252,6 +284,15 @@ function handleGoogleResult( text ) {
             }
 
     }
+}
+
+/**
+ * Replace special characters and lowercase a string.
+ * @param {string} text - The text to manipulate.
+ * @returns {string} The manipulated text.
+ */
+function replaceSpecial( text ) {
+    return text.replace(/[&\/\\#,+()$~%.'":*?<>{}-]/g,'').replace(/\s\s+/g, ' ').toLowerCase().trim();
 }
 
 /**
@@ -360,8 +401,8 @@ async function fetchLineup() {
         await page.setExtraHTTPHeaders({
             'Accept-Language': 'en-GB,en-US;q=0.9,en;q=0.8'
         });
-        await page.goto(CHARLOTTE_URL, { waitUntil: 'domcontentloaded' });
-        await page.waitFor(45000);
+        await page.goto(CHARLOTTE_URL, { waitUntil: 'domcontentloaded', timeout: 120000 });
+        await page.waitFor(15000);
         console.log("Page loaded");
         let newLineup = await page.evaluate( (CHANNELS) => {
             let channels = document.querySelectorAll("#top .channel_col");
@@ -388,6 +429,11 @@ async function fetchLineup() {
             return newLineup;
         }, CHANNELS );
         console.log(Object.keys(newLineup).length);
+        for( let key in newLineup ) {
+            newLineup[key].name = replaceSpecial(newLineup[key].name);
+            newLineup[key].program.show = replaceSpecial(newLineup[key].program.show);
+            newLineup[key].program.episode = replaceSpecial(newLineup[key].program.episode);
+        }
         lineup = newLineup;
         browser.close();
     }
