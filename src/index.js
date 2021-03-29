@@ -150,6 +150,8 @@ function handleGoogleResult( text ) {
     if( text == "watch roku" ) text = "roku";
     if( text == "turn volume up" ) text = "volume up";
     if( text == "turn volume down" ) text = "volume down";
+    if( text == "sports" ) text = "sport";
+    if( text == "movies" ) text = "movie";
     
     switch(text) {
         case "on":
@@ -441,7 +443,6 @@ async function fetchLineup() {
         console.log(err);
     }
     console.log("Lineup fetched");
-    console.log(lineup);
     setTimeout(fetchLineup, LINEUP_INTERVAL);
 }
 
