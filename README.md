@@ -19,3 +19,4 @@ of your device. Many are hardcoded into this project.
 9. Make sure you have a Project and Google Cloud Credentials here: [https://cloud.google.com/speech-to-text/docs/quickstart-client-libraries#client-libraries-usage-nodejs](https://cloud.google.com/speech-to-text/docs/quickstart-client-libraries#client-libraries-usage-nodejs)
     a. Likewise, set the `GOOGLE_APPLICATION_CREDENTIALS` environment variable to your credential file's path (`/etc/environment`).
 10. `npm start`
+11. (Optional) Set up Harmony API and Papa Voice to run as startup services.

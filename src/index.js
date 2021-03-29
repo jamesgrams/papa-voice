@@ -27,6 +27,15 @@ const GOOGLE_REQUEST = {
 const CHARLOTTE_URL = "https://www.tvpassport.com/lineups/set/95354D?lineupname=Spectrum+-+Charlotte%2C+NC+&tz=America/New_York";
 const LINEUP_INTERVAL = 1000 * 60 * 5;
 const HARMONY_URL = "http://localhost:8282/hubs/papa/devices/";
+const GIT_FETCH_COMMAND = "git -C /home/pi/papa-voice fetch";
+const GIT_UPDATES_AVAILABLE_COMMAND = 'if [ $(git -C /home/pi/papa-voice rev-parse HEAD) != $(git -C /home/pi/papa-voice rev-parse @{u}) ]; then echo "1"; else echo "0"; fi;';
+const GIT_PULL_COMMAND = "git -C /home/pi/papa-voice pull";
+const GIT_PULL_INTERVAL = 1000 * 60 * 5;
+
+// List of channels that Papa gets - taken from here: https://www.spectrum.com/cable-tv/channel-lineup
+// Gold package
+// JSON.stringify([...document.querySelectorAll(".clu-table:not(.table_headers,.header) .nogutter:first-child .small.sortable")].map(el => parseInt(el.innerText)))
+const CHANNELS = [2,4,5,6,8,13,15,1275,1276,1277,1,3,9,10,11,12,17,18,19,21,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,74,75,76,78,79,80,81,86,87,88,89,90,92,93,95,109,110,119,124,125,127,128,130,131,133,134,135,136,137,140,141,151,159,161,163,165,169,171,174,175,176,177,179,180,182,184,185,187,188,189,194,195,198,207,209,210,215,221,222,224,226,227,232,253,254,255,256,262,263,265,266,286,287,288,290,291,292,295,297,299,302,306,308,310,312,315,316,324,325,370,375,376,377,378,379,380,381,382,384,385,386,388,392,401,402,406,413,417,442,443,444,463,464,465,468,469,470,472,474,476,477,478,481,484,490,495,496,511,512,513,514,515,516,517,551,552,553,554,555,556,557,558,571,572,581,582,583,584,585,586,602,603,604,605,606,607,608,620,621,622,623,625,627,632,640,803,811,827,898,899,1233,1240,1245,1247,1250,1251,1255,1256,1260,1261,1263,1265,1278,1279,1295,1296,1554,1901,1902,1903,1905,1906,1907,1908,1909,1910,1911,1912,1913,1914,1915,1916,1917,1918,1919,1920,1921,1922,1923,1924,1925,1926,1927,1928,1929,1930,1931,1932,1933,1934,1935,1936,1937,1938,1939,1940,1941,1942,1943,1944,1945,1946,1947,1948,1949,1950];
 
 let lineup = {};
 let prevCommand = null;
@@ -54,6 +63,16 @@ let currentlyStreamingToGoogle = false;
 async function main() {
     fetchLineup();
     //listen();
+    //setInterval( update, GIT_PULL_INTERVAL );
+}
+
+function update() {
+    proc.execSync( GIT_FETCH_COMMAND );
+    let updatesAvailable = parseInt(proc.execSync( GIT_UPDATES_AVAILABLE_COMMAND ).toString());
+    if( updatesAvailable ) {
+        proc.execSync(GIT_PULL_COMMAND);
+        restart();
+    }
 }
 
 /**
@@ -96,7 +115,7 @@ function pipeToGoogle( recording ) {
             stopGoogleStream();
             if( data.results[0] && data.results[0].alternatives[0] ) {
                 console.log(`Transcription: ${data.results[0].alternatives[0].transcript}`);
-                handleGoogleResult(data.results[0].alternatives[0]);
+                handleGoogleResult(data.results[0].alternatives[0].transcript);
             }
         });
     stopGoogleStreamTimeout = setTimeout( stopGoogleStream, MAX_LISTEN_TIME );
@@ -121,10 +140,6 @@ function handleGoogleResult( text ) {
             runCommands( [ 
                 {
                     device: "samsung-tv",
-                    command: "power-on"
-                },
-                {
-                    device: "arris-dvr",
                     command: "power-on"
                 }
             ] );
@@ -206,7 +221,7 @@ function handleGoogleResult( text ) {
             ] );
             break;
         default:
-            let match = result.match(/^watch\s(.+)/
+            let match = text.match(/^watch\s(.+)/);
             if( match ) {
                 function enterChannelNumber( number ) {
                     let commands = number.toString().split("").map( el => {
@@ -214,11 +229,11 @@ function handleGoogleResult( text ) {
                             device: "samsung-tv",
                             command: el
                         }
-                    };
+                    });
                     console.log("Setting channel to " + number);
                     runCommands(commands);
                 }
-                if( parseInt( match[1] ) {
+                if( parseInt( match[1] ) ) {
                     enterChannelNumber( match[1] );
                 }
                 else {
@@ -230,6 +245,7 @@ function handleGoogleResult( text ) {
                     );
                     if( results.length ) {
                         if( cursor >= results.length ) cursor = 0;
+                        console.log("Matched: " + results[cursor].name);
                         enterChannelNumber( results[cursor].number );
                     }
                 }
@@ -252,8 +268,14 @@ function sleep(milliseconds) {
  */
 async function runCommands( commands ) {
     for( let command of commands ) {
+        console.log("Running command: " + JSON.stringify(command));
         if( command.sleep ) await sleep(command.sleep);
-        else await axios.post( HARMONY_URL + command.device + "/commands/" + command.command );
+        else {
+            try {
+                await axios.post( HARMONY_URL + command.device + "/commands/" + command.command );
+            }
+            catch(err) { console.log(err) }
+        }
         await sleep(100);
     }
 }
@@ -341,11 +363,14 @@ async function fetchLineup() {
         await page.goto(CHARLOTTE_URL, { waitUntil: 'domcontentloaded' });
         await page.waitFor(45000);
         console.log("Page loaded");
-        let newLineup = await page.evaluate( () => {
+        let newLineup = await page.evaluate( (CHANNELS) => {
             let channels = document.querySelectorAll("#top .channel_col");
             let newLineup = {};
             channels.forEach( el => {
                 let number = el.querySelector(".channel-number").innerText
+                if( !parseInt(number) ) return;
+                // Only include valid channels
+                if( CHANNELS.indexOf(parseInt(number)) === -1 ) return;
                 if( !el.nextElementSibling ) return;
                 let listingCell = el.nextElementSibling.querySelector(".listing_cell");
                 if( !listingCell ) return;
@@ -361,9 +386,10 @@ async function fetchLineup() {
                 newLineup[number] = channel;
             } );
             return newLineup;
-        } );
+        }, CHANNELS );
         console.log(Object.keys(newLineup).length);
         lineup = newLineup;
+        browser.close();
     }
     catch(err) {
         console.log(err);
@@ -374,3 +400,24 @@ async function fetchLineup() {
 }
 
 main();
+
+// Restart the process if there is an error
+// This should be done in the service file.
+/*process.on('uncaughtException', function (err) {
+    console.error(err.stack);
+    restart();
+});*/
+
+/**
+ * Restart the program
+ */
+function restart() {
+    process.on("exit", function () {
+        proc.spawn(process.argv.shift(), process.argv, {
+            cwd: process.cwd(),
+            detached : true,
+            stdio: "inherit"
+        });
+    });
+    process.exit();
+}
