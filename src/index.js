@@ -63,7 +63,7 @@ let currentlyStreamingToGoogle = false;
  * Main function.
  */
 async function main() {
-    sleep(WAIT_TIME);
+    await sleep(WAIT_TIME);
     await proc.execSync(RESTART_HARMONY);
     fetchLineup();
     listen();
