@@ -249,7 +249,7 @@ function handleGoogleResult( text ) {
                 function enterChannelNumber( number ) {
                     let commands = number.toString().split("").map( el => {
                         return {
-                            device: "samsung-tv",
+                            device: "arris-dvr",
                             command: el
                         }
                     });
