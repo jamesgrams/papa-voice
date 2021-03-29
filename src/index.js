@@ -274,7 +274,7 @@ function handleGoogleResult( text ) {
                         if( a.count > b.count ) return -1;
                         if( b.count > a.count ) return 1;
                         if( parseInt(a.number) < parseInt(b.number) ) return -1;
-                        if( parseInt(b.number) < parseInt(b.number) ) return 1;
+                        if( parseInt(b.number) < parseInt(a.number) ) return 1;
                         return 0;
                     } );
                     if( results.length ) {
