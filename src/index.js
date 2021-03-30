@@ -429,7 +429,7 @@ async function fetchLineup() {
             'Accept-Language': 'en-GB,en-US;q=0.9,en;q=0.8'
         });
         await page.goto(CHARLOTTE_URL, { waitUntil: 'domcontentloaded', timeout: 120000 });
-        await page.waitForTimeout(35000);
+        await page.waitFor(35000);
         log("Page loaded");
         let newLineup = await page.evaluate( (CHANNELS) => {
             let channels = document.querySelectorAll("#top .channel_col");
