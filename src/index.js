@@ -8,6 +8,7 @@ const speech = require('@google-cloud/speech');
 const proc = require("child_process");
 const puppeteer = require("puppeteer");
 const axios = require("axios");
+const fs = require("fs");
 
 const MAX_LISTEN_TIME = 20000;
 const RECORDER_TYPE = "arecord";
@@ -32,7 +33,18 @@ const GIT_UPDATES_AVAILABLE_COMMAND = 'if [ $(git -C /home/pi/papa-voice rev-par
 const GIT_PULL_COMMAND = "git -C /home/pi/papa-voice pull";
 const GIT_PULL_INTERVAL = 1000 * 60 * 5;
 const RESTART_HARMONY = "sudo service harmony-api-server restart";
-const WAIT_TIME = 1000 * 20;
+const WAIT_TIME = 1000 * 3;
+const LINEUP_FILE = "/home/pi/lineup.json";
+const DOGGER_LOGGER_URL = "http://dogger-logger.herokuapp.com/log";
+let doggerLoggerKey = null;
+if( process.env.GOOGLE_APPLICATION_CREDENTIALS && fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS) ) {
+    try {
+        doggerLoggerKey = JSON.parse( fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS) ).private_key_id;
+    }
+    catch(err) {
+        //ok
+    }
+}
 
 // List of channels that Papa gets - taken from here: https://www.spectrum.com/cable-tv/channel-lineup
 // Gold package
@@ -63,6 +75,14 @@ let currentlyStreamingToGoogle = false;
  * Main function.
  */
 async function main() {
+    try {
+        if( fs.existsSync(LINEUP_FILE) ) {
+            lineup = JSON.parse(fs.readFileSync(LINEUP_FILE));
+        }
+    }
+    catch(err) {
+        log(err);
+    }
     await sleep(WAIT_TIME);
     await proc.exec(RESTART_HARMONY);
     fetchLineup();
@@ -71,18 +91,18 @@ async function main() {
 }
 
 function update() {
-    console.log("Checking for updates");
+    log("Checking for updates");
     try {
         proc.execSync( GIT_FETCH_COMMAND );
         let updatesAvailable = parseInt(proc.execSync( GIT_UPDATES_AVAILABLE_COMMAND ).toString());
         if( updatesAvailable ) {
-            console.log("Updating");
+            log("Updating");
             proc.execSync(GIT_PULL_COMMAND);
             restart();
         }
     }
     catch(err) {
-        console.log(err);
+        log(err);
     }
     setTimeout( update, GIT_PULL_INTERVAL );
 }
@@ -107,7 +127,7 @@ function listen() {
 function pipeToGoogle( recording ) {
     const client = new speech.SpeechClient();
     currentlyStreamingToGoogle = true;
-    console.log("Started pipe to Google");
+    log("Started pipe to Google");
     
     let stopGoogleStreamTimeout;
     let stopGoogleStream = function() {
@@ -115,7 +135,7 @@ function pipeToGoogle( recording ) {
         recording.stream().unpipe( recognizeStream ); // this will pause the stream (can be resumed)
         // it will get garbage collected
         recognizeStream.end();
-        console.log("Stopped pipe to Google");
+        log("Stopped pipe to Google");
         currentlyStreamingToGoogle = false;
         // the input has also stopped, so we have to restart the program
         listen();
@@ -126,7 +146,7 @@ function pipeToGoogle( recording ) {
         .on('data', data => {
             stopGoogleStream();
             if( data.results[0] && data.results[0].alternatives[0] ) {
-                console.log(`Transcription: ${data.results[0].alternatives[0].transcript}`);
+                log(`Transcription: ${data.results[0].alternatives[0].transcript}`);
                 handleGoogleResult(data.results[0].alternatives[0].transcript);
             }
         });
@@ -142,6 +162,7 @@ function handleGoogleResult( text ) {
     text = replaceSpecial(text);
 
     while( text.match(/^grasshopper/) ) text = text.replace(/^grasshopper/g,"").trim();
+    text = text.replace(/^wach/, "watch");
     if( text == "turn on" ) text = "on";
     if( text == "turn off" ) text = "off";
     if( text == "watch amazon" ) text = "amazon";
@@ -159,7 +180,7 @@ function handleGoogleResult( text ) {
     
     switch(text) {
         case "on":
-            console.log("Turning TV On");
+            log("Turning TV On");
             runCommands( [ 
                 {
                     device: "samsung-tv",
@@ -168,7 +189,7 @@ function handleGoogleResult( text ) {
             ] );
             break;
         case "off":
-            console.log("Turning TV Off");
+            log("Turning TV Off");
             runCommands( [ 
                 {
                     device: "samsung-tv",
@@ -177,7 +198,7 @@ function handleGoogleResult( text ) {
             ] );
             break;
         case "volume down":
-            console.log("Lowering TV Volume");
+            log("Lowering TV Volume");
             runCommands( [ 
                 {
                     device: "samsung-tv",
@@ -186,7 +207,7 @@ function handleGoogleResult( text ) {
             ] );
             break;
         case "volume up":
-            console.log("Increasing TV Volume");
+            log("Increasing TV Volume");
             runCommands( [ 
                 {
                     device: "samsung-tv",
@@ -195,7 +216,7 @@ function handleGoogleResult( text ) {
             ] );
             break;
         case "spectrum":
-            console.log("Going to Spectrum");
+            log("Going to Spectrum");
             runCommands( [ 
                 {
                     device: "samsung-tv",
@@ -204,7 +225,7 @@ function handleGoogleResult( text ) {
             ] );
             break;
         case "roku":
-            console.log("Going to Roku");
+            log("Going to Roku");
             runCommands( [ 
                 {
                     device: "samsung-tv",
@@ -213,7 +234,7 @@ function handleGoogleResult( text ) {
             ] );
             break;
         case "amazon":
-            console.log("Going to Amazon");
+            log("Going to Amazon");
             runCommands( [ 
                 {
                     device: "samsung-tv",
@@ -253,7 +274,7 @@ function handleGoogleResult( text ) {
                             command: el
                         }
                     });
-                    console.log("Setting channel to " + number);
+                    log("Setting channel to " + number);
                     runCommands(commands);
                 }
                 let value = replaceSpecial(match[1]);
@@ -264,10 +285,7 @@ function handleGoogleResult( text ) {
                     let results = Object.values( lineup ).filter( el => {
                         let count = 0;
                         for( let val of value.split(" ") ) {
-                            if( el.name.match( val ) ||
-                            el.program.show.match( val ) ||
-                            el.program.episode.match( val ) ||
-                            el.program.type.match( val ) ) {
+                            if( el.matcher.match( val ) ) {
                                 count++;
                             }
                         }
@@ -283,7 +301,7 @@ function handleGoogleResult( text ) {
                     } );
                     if( results.length ) {
                         if( cursor >= results.length ) cursor = 0;
-                        console.log("Matched: " + results[cursor].name);
+                        log("Matched: " + results[cursor].name);
                         enterChannelNumber( results[cursor].number );
                     }
                 }
@@ -315,14 +333,14 @@ function sleep(milliseconds) {
  */
 async function runCommands( commands ) {
     for( let command of commands ) {
-        console.log("Running command: " + JSON.stringify(command));
+        log("Running command: " + JSON.stringify(command));
         if( command.sleep ) await sleep(command.sleep);
         else {
             try {
                 await axios.post( HARMONY_URL + command.device + "/commands/" + command.command );
             }
             catch(err) { 
-                console.log(err);
+                log(err);
                 await proc.exec(RESTART_HARMONY);
             }
         }
@@ -379,13 +397,13 @@ function detectHotword(callback) {
         for (let frame of frames) {
             let index = handle.process(frame);
             if (index !== -1) {
-                console.log(`Detected '${KEYWORDS[index]}'`);
+                log(`Detected '${KEYWORDS[index]}'`);
                 if( callback ) callback( recording );
             }
         }
     });
 
-    console.log(`Listening for wake word(s): ${KEYWORDS}`);
+    log(`Listening for wake word(s): ${KEYWORDS}`);
     process.stdin.resume();
 }
 
@@ -402,7 +420,7 @@ function chunkArray(array, size) {
  * Fetch lineup.
  */
 async function fetchLineup() {
-    console.log("Fetching lineup");
+    log("Fetching lineup");
     try {
         let browser = await puppeteer.launch({headless: true, product: 'chrome', executablePath: '/usr/bin/chromium-browser' });
         let page = await browser.newPage();
@@ -412,7 +430,7 @@ async function fetchLineup() {
         });
         await page.goto(CHARLOTTE_URL, { waitUntil: 'domcontentloaded', timeout: 120000 });
         await page.waitFor(15000);
-        console.log("Page loaded");
+        log("Page loaded");
         let newLineup = await page.evaluate( (CHANNELS) => {
             let channels = document.querySelectorAll("#top .channel_col");
             let newLineup = {};
@@ -433,11 +451,12 @@ async function fetchLineup() {
                     },
                     number: number
                 };
+                channel.matcher = [channel.name, channel.program.show, channel.program.episode, channel.program.type].join(" ");
                 newLineup[number] = channel;
             } );
             return newLineup;
         }, CHANNELS );
-        console.log(Object.keys(newLineup).length);
+        log(Object.keys(newLineup).length);
         for( let key in newLineup ) {
             newLineup[key].name = replaceSpecial(newLineup[key].name);
             newLineup[key].program.show = replaceSpecial(newLineup[key].program.show);
@@ -445,11 +464,12 @@ async function fetchLineup() {
         }
         lineup = newLineup;
         browser.close();
+        fs.writeFileSync(LINEUP_FILE, JSON.stringify(lineup)); // cache the lineup for reboots
     }
     catch(err) {
-        console.log(err);
+        log(err);
     }
-    console.log("Lineup fetched");
+    log("Lineup fetched");
     setTimeout(fetchLineup, LINEUP_INTERVAL);
 }
 
@@ -473,4 +493,23 @@ function restart() {
         });
     });
     process.exit();
+}
+
+/**
+ * Log a message.
+ * @param {string} message - The message to log. 
+ */
+function log(message) {
+    console.log(message);
+    if( doggerLoggerKey ) {
+        try {
+            axios.post(DOGGER_LOGGER_URL, {
+                data: message,
+                key: doggerLoggerKey
+            });
+        }
+        catch(err) {
+            // OK
+        }
+    }
 }
