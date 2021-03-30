@@ -504,7 +504,7 @@ function log(message) {
     if( doggerLoggerKey ) {
         try {
             axios.post(DOGGER_LOGGER_URL, {
-                data: message,
+                data: message.toString(),
                 key: doggerLoggerKey
             });
         }
