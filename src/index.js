@@ -12,8 +12,8 @@ const fs = require("fs");
 
 const MAX_LISTEN_TIME = 20000;
 const RECORDER_TYPE = "arecord";
-const KEYWORDS = ["grasshopper"];
-const SENSITIVITIES = KEYWORDS.map( el => 0.5 );
+const KEYWORDS = ["grasshopper","bumblebee"];
+const SENSITIVITIES = KEYWORDS.map( el => 0.75 );
 const KEYWORD_PATHS = KEYWORDS.map( el => getBuiltinKeywordPath( BUILTIN_KEYWORDS_STRING_TO_ENUM.get(el) ) );
 const SAMPLE_RATE_HERTZ = 16000;
 const GOOGLE_CONFIG = {
@@ -45,6 +45,8 @@ if( process.env.GOOGLE_APPLICATION_CREDENTIALS && fs.existsSync(process.env.GOOG
         //ok
     }
 }
+
+const STOPWORDS = ["i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you", "your", "yours", "yourself", "yourselves", "he", "him", "his", "himself", "she", "her", "hers", "herself", "it", "its", "itself", "they", "them", "their", "theirs", "themselves", "what", "which", "who", "whom", "this", "that", "these", "those", "am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "having", "do", "does", "did", "doing", "a", "an", "the", "and", "but", "if", "or", "because", "as", "until", "while", "of", "at", "by", "for", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "to", "from", "up", "down", "in", "out", "on", "off", "over", "under", "again", "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "any", "both", "each", "few", "more", "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too", "very", "s", "t", "can", "will", "just", "don", "should", "now"];
 
 // List of channels that Papa gets - taken from here: https://www.spectrum.com/cable-tv/channel-lineup
 // Gold package
@@ -162,6 +164,7 @@ function handleGoogleResult( text ) {
     text = replaceSpecial(text);
 
     while( text.match(/^grasshopper/) ) text = text.replace(/^grasshopper/g,"").trim();
+    while( text.match(/^bumblebee/) ) text = text.replace(/^bumblebee/g,"").trim();
     text = text.replace(/^wach/, "watch");
     if( text == "turn on" ) text = "on";
     if( text == "turn off" ) text = "off";
@@ -316,7 +319,7 @@ function handleGoogleResult( text ) {
  * @returns {string} The manipulated text.
  */
 function replaceSpecial( text ) {
-    return text.replace(/[&\/\\#,+()$~%.'":*?<>{}-]/g,'').replace(/\s\s+/g, ' ').toLowerCase().trim();
+    return text.replace(/[&\/\\#,+()$~%.'":*?<>{}-]/g,'').toLowerCase().replace(new RegExp('\\b('+STOPWORDS.join('|')+')\\b', 'g'), '').replace(/\s\s+/g, ' ').trim();
 }
 
 /**
@@ -429,7 +432,7 @@ async function fetchLineup() {
             'Accept-Language': 'en-GB,en-US;q=0.9,en;q=0.8'
         });
         await page.goto(CHARLOTTE_URL, { waitUntil: 'domcontentloaded', timeout: 120000 });
-        await page.waitFor(35000);
+        await page.waitFor(60000);
         log("Page loaded");
         let newLineup = await page.evaluate( (CHANNELS) => {
             let channels = document.querySelectorAll("#top .channel_col");
@@ -458,9 +461,7 @@ async function fetchLineup() {
         }, CHANNELS );
         log(Object.keys(newLineup).length);
         for( let key in newLineup ) {
-            newLineup[key].name = replaceSpecial(newLineup[key].name);
-            newLineup[key].program.show = replaceSpecial(newLineup[key].program.show);
-            newLineup[key].program.episode = replaceSpecial(newLineup[key].program.episode);
+            newLineup[key].matcher = replaceSpecial(newLineup[key].matcher);
         }
         lineup = newLineup;
         browser.close();
