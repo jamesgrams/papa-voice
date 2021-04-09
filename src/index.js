@@ -205,7 +205,7 @@ function handleGoogleResult( text ) {
             runCommands( [ 
                 {
                     device: "samsung-tv",
-                    command: "volume-down?repeat=5"
+                    command: "volume-down?repeat=12"
                 }
             ] );
             break;
@@ -214,7 +214,7 @@ function handleGoogleResult( text ) {
             runCommands( [ 
                 {
                     device: "samsung-tv",
-                    command: "volume-up?repeat=5"
+                    command: "volume-up?repeat=12"
                 }
             ] );
             break;
